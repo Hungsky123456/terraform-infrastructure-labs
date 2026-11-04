@@ -1,0 +1,56 @@
+
+# ==========================================
+# Terraform Infrastructure Labs
+# Global Git Ignore Rules
+# ==========================================
+
+# Backups - never upload
+BACKUPS/
+
+# Terraform working directories
+.terraform/
+
+# Terraform State and backups
+*.tfstate
+*.tfstate.*
+terraform.tfstate.d/
+
+# Terraform lock information
+.terraform.tfstate.lock.info
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Saved Terraform Plans
+*.tfplan
+*.tfplan.json
+
+# Terraform override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Generated LAB output files
+server-*.txt
+server-info.txt
+
+# Sensitive Terraform variables
+secrets.tfvars
+secrets.auto.tfvars
+*.tfvars.secret
+*.auto.tfvars.secret
+*.secret.tfvars
+*.secret.auto.tfvars
+
+# Other sensitive files
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+
+# Keep Terraform dependency lock files
+!.terraform.lock.hcl
