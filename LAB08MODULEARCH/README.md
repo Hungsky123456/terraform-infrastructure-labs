@@ -132,15 +132,10 @@ Terraform State files and `.terraform/` directories are excluded from Git.
 ## 5. Environment Configuration
 
 | Environment | Network | Subnet | Gateway | Servers | Resources |
-
 |---|---|---|---|---:|---:|
-
 | DEV | dev-network | 192.168.50.0/24 | 192.168.50.1 | 4 | 6 |
-
 | TEST | test-network | 192.168.60.0/24 | 192.168.60.1 | 2 | 4 |
-
 | PROD | prod-network | 192.168.70.0/24 | 192.168.70.1 | 2 | 4 |
-
 | **Total** | **3 Networks** | | | **8** | **14** |
 
 Each environment contains:
@@ -156,15 +151,10 @@ Each environment contains:
 ### DEV Environment
 
 | Server | Profile | CPU | RAM |
-
 |---|---|---:|---:|
-
 | ubuntu-dev-01 | standard | 1 vCPU | 2048 MB |
-
 | ubuntu-dev-02 | standard | 1 vCPU | 2048 MB |
-
 | ubuntu-db-01 | database | 4 vCPU | 8192 MB |
-
 | ubuntu-mon-01 | monitoring | 2 vCPU | 4096 MB |
 
 Application: `nginx-web`
@@ -174,11 +164,8 @@ Port: `8080`
 ### TEST Environment
 
 | Server | Profile | CPU | RAM |
-
 |---|---|---:|---:|
-
 | ubuntu-test-01 | standard | 2 vCPU | 6144 MB |
-
 | ubuntu-test-db-01 | database | 4 vCPU | 8192 MB |
 
 Application: `nginx-web-test`
@@ -188,11 +175,8 @@ Port: `8080`
 ### PROD Environment
 
 | Server | Profile | CPU | RAM |
-
 |---|---|---:|---:|
-
 | ubuntu-prod-01 | standard | 4 vCPU | 8192 MB |
-
 | ubuntu-prod-db-01 | database | 8 vCPU | 16384 MB |
 
 Application: `nginx-web-prod`
@@ -423,15 +407,10 @@ Run these commands from the relevant environment directory.
 ## 10. Final Lab Results
 
 | Environment | Network | Servers | Application | Total |
-
 |---|---:|---:|---:|---:|
-
 | DEV | 1 | 4 | 1 | 6 |
-
 | TEST | 1 | 2 | 1 | 4 |
-
 | PROD | 1 | 2 | 1 | 4 |
-
 | **Total** | **3** | **8** | **3** | **14** |
 
 ### Verified Results
