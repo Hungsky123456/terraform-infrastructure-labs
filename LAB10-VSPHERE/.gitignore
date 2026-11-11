@@ -1,0 +1,48 @@
+# Terraform provider cache
+**/.terraform/*
+
+# Terraform State and backups
+*.tfstate
+*.tfstate.*
+*.tfstate.bak*
+*.tfstate.backup
+
+# Terraform variables containing secrets
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Local credentials
+.env
+.env.*
+*.pem
+*.key
+
+# Terraform crash logs and plan files
+crash.log
+crash.*.log
+*.tfplan
+tfplan
+tfplan.*
+
+# Local backup directories
+backup-before-*/
+backup-*/
+
+# Backup configuration files
+*.tf.bak
+*.tf.before-*.bak
+
+# Terraform override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform CLI configuration
+.terraformrc
+terraform.rc
+
+# Keep the provider dependency lock file tracked
+!.terraform.lock.hcl
