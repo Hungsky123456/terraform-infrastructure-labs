@@ -4,6 +4,11 @@ resource "vsphere_virtual_machine" "this" {
   resource_pool_id = var.resource_pool_id
   datastore_id     = var.datastore_id
 
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [clone]
+  }
+
   firmware = "efi"
 
   num_cpus = var.num_cpus
