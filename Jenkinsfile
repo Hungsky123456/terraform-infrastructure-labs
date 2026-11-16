@@ -40,15 +40,22 @@ pipeline {
                         dir("LAB10-VSPHERE/environments/${envName}") {
                             echo "Validating environment: ${envName}"
 
-                            sh '''
-                                terraform init -backend=false -input=false
-                                terraform validate
-                            '''
+                            withEnv([
+                                'TF_DATA_DIR=.terraform/validate',
+                                'TF_IN_AUTOMATION=true'
+                            ]) {
+                                sh '''
+                                    set -eu
+                                    terraform init -backend=false -input=false
+                                    terraform validate
+                                '''
+                            }
                         }
                     }
                 }
             }
         }
+
 
         stage('Terraform Remote State Check') {
             steps {
