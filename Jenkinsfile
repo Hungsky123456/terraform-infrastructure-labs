@@ -91,8 +91,7 @@ pipeline {
                 }
             }
         }
-
-        stage('Terraform Plan - DEV') {
+        stage('Terraform Plan') {
             steps {
                 withCredentials([
                     string(
@@ -114,27 +113,27 @@ pipeline {
                         'AWS_EC2_METADATA_DISABLED=true',
                         'TF_IN_AUTOMATION=true'
                     ]) {
-                        dir('LAB10-VSPHERE/environments/dev') {
-                            echo 'Running Terraform Plan for DEV'
+                        script {
+                            for (envName in ['dev', 'test', 'prod']) {
+                                dir("LAB10-VSPHERE/environments/${envName}") {
+                                    echo "Running Terraform Plan for ${envName.toUpperCase()}"
 
-                            sh '''
-                                set +x
-                                set -eu
+                                    sh '''
+                                        set +x
+                                        set -eu
 
-                                terraform init -reconfigure -input=false
+                                        terraform init -reconfigure -input=false
 
-                                terraform plan \
-                                    -input=false \
-                                    -no-color \
-                                    -lock-timeout=60s
-                            '''
+                                        terraform plan -input=false -no-color -lock-timeout=60s
+                                    '''
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
-
     post {
         success {
             echo 'LAB10: All CI checks passed.'
