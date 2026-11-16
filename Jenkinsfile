@@ -133,6 +133,24 @@ pipeline {
                 }
             }
         }
+
+        stage('Manual Approval') {
+            steps {
+                script {
+                    timeout(time: 15, unit: 'MINUTES') {
+                        def approvedBy = input(
+                            id: 'LAB10-Manual-Approval',
+                            message: 'Review Terraform Plan for DEV, TEST and PROD before approval.',
+                            ok: 'Approve',
+                            submitter: 'admin',
+                            submitterParameter: 'APPROVED_BY'
+                        )
+
+                        echo "LAB10: Approved by ${approvedBy}"
+                    }
+                }
+            }
+        }
     }
     post {
         success {
