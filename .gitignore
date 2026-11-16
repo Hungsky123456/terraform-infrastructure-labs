@@ -54,3 +54,25 @@ secrets.auto.tfvars
 
 # Keep Terraform dependency lock files
 !.terraform.lock.hcl
+
+# LAB10 - Additional Terraform protection
+
+# Terraform variable files
+*.tfvars
+*.tfvars.json
+
+# Terraform saved plans
+tfplan
+tfplan.*
+*.tfplan
+
+# Local backup directories
+backup-before-*/
+backup-*/
+
+# Local credentials
+*.key
+
+# Terraform CLI configuration
+.terraformrc
+terraform.rc

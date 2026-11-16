@@ -49,6 +49,41 @@ pipeline {
                 }
             }
         }
+
+        stage('Terraform Remote State Check') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'minio-terraform-access-key',
+                        variable: 'AWS_ACCESS_KEY_ID'
+                    ),
+                    string(
+                        credentialsId: 'minio-terraform-secret-key',
+                        variable: 'AWS_SECRET_ACCESS_KEY'
+                    )
+                ]) {
+                    withEnv([
+                        'AWS_CA_BUNDLE=/etc/jenkins/certs/minio-public.crt',
+                        'AWS_EC2_METADATA_DISABLED=true'
+                    ]) {
+                        script {
+                            for (envName in ['dev', 'test', 'prod']) {
+                                dir("LAB10-VSPHERE/environments/${envName}") {
+                                    echo "Checking Remote State: ${envName}"
+
+                                    sh '''
+                                        set +x
+                                        set -eu
+                                        terraform init -reconfigure -input=false
+                                        terraform state list
+                                    '''
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     post {
