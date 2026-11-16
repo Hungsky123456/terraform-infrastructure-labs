@@ -84,6 +84,48 @@ pipeline {
                 }
             }
         }
+
+        stage('Terraform Plan - DEV') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'minio-terraform-access-key',
+                        variable: 'AWS_ACCESS_KEY_ID'
+                    ),
+                    string(
+                        credentialsId: 'minio-terraform-secret-key',
+                        variable: 'AWS_SECRET_ACCESS_KEY'
+                    ),
+                    usernamePassword(
+                        credentialsId: 'vsphere-terraform-credentials',
+                        usernameVariable: 'TF_VAR_vsphere_user',
+                        passwordVariable: 'TF_VAR_vsphere_password'
+                    )
+                ]) {
+                    withEnv([
+                        'AWS_CA_BUNDLE=/etc/jenkins/certs/minio-public.crt',
+                        'AWS_EC2_METADATA_DISABLED=true',
+                        'TF_IN_AUTOMATION=true'
+                    ]) {
+                        dir('LAB10-VSPHERE/environments/dev') {
+                            echo 'Running Terraform Plan for DEV'
+
+                            sh '''
+                                set +x
+                                set -eu
+
+                                terraform init -reconfigure -input=false
+
+                                terraform plan \
+                                    -input=false \
+                                    -no-color \
+                                    -lock-timeout=60s
+                            '''
+                        }
+                    }
+                }
+            }
+        }
     }
 
     post {
