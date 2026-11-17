@@ -10,6 +10,7 @@ pipeline {
         timestamps()
         disableConcurrentBuilds()
         skipDefaultCheckout(true)
+        disableRestartFromStage()
     }
 
     stages {
@@ -168,46 +169,89 @@ pipeline {
                 }
             }
         }
+        stage('Capture Trusted SHA256') {
+            steps {
+                dir('LAB10-VSPHERE/environments/dev') {
+                    script {
+                        env.LAB10_DEV_PLAN_SHA256 = sh(
+                            script: '''#!/bin/bash
+                                set +x
+                                set -euo pipefail
+
+                                test -f tfplan
+                                sha256sum -c tfplan.sha256 > /dev/null
+
+                                sha256sum tfplan | cut -d ' ' -f1
+                            ''',
+                            returnStdout: true
+                        ).trim()
+
+                        env.LAB10_DEV_POLICY_SHA256 = sh(
+                            script: '''#!/bin/bash
+                                set +x
+                                set -euo pipefail
+
+                                test -f ../../policies/dev-plan-safety.jq
+
+                                sha256sum ../../policies/dev-plan-safety.jq |
+                                    cut -d ' ' -f1
+                            ''',
+                            returnStdout: true
+                        ).trim()
+
+                        if (!(env.LAB10_DEV_PLAN_SHA256 ==~ /[a-f0-9]{64}/)) {
+                            error('LAB10: Invalid DEV Plan SHA256.')
+                        }
+
+                        if (!(env.LAB10_DEV_POLICY_SHA256 ==~ /[a-f0-9]{64}/)) {
+                            error('LAB10: Invalid DEV Policy SHA256.')
+                        }
+
+                        echo 'LAB10: Trusted DEV Plan SHA256 captured.'
+                        echo 'LAB10: Trusted DEV Policy SHA256 captured.'
+                    }
+                }
+            }
+        }
         stage('Plan Safety Check') {
             steps {
                 dir('LAB10-VSPHERE/environments/dev') {
-                    sh '''#!/bin/bash
-                        set +x
-                        set -euo pipefail
+                    script {
+                        env.LAB10_DEV_HAS_CHANGES = 'false'
 
-                        terraform show -json tfplan | jq -e '
-                            (.format_version | type == "string")
-                            and (.resource_changes | type == "array")
-                            and (.errored == false)
-                            and (.complete == true)
-                            and (
-                                [
-                                    .resource_changes[]
-                                    | select(.mode == "managed")
-                                    | select(.change.actions != ["no-op"])
-                                ] as $changes
-                                |
-                                ($changes | length <= 1)
-                                and all($changes[];
-                                    .address == "vsphere_virtual_machine.dev"
-                                    and .change.actions == ["update"]
-                                    and .change.before.memory == 1024
-                                    and .change.after.memory == 2048
-                                    and (
-                                        (.change.before | del(.memory))
-                                        ==
-                                        (.change.after | del(.memory))
-                                    )
-                                    and (
-                                        [.change.after_unknown | .. | booleans]
-                                        | all(. == false)
-                                    )
-                                )
-                            )
-                        ' > /dev/null
+                        sh '''#!/bin/bash
+                            set +x
+                            set -euo pipefail
 
-                        echo "LAB10: DEV Plan Safety Check passed."
-                    '''
+                            test -f tfplan
+                            test -f ../../policies/dev-plan-safety.jq
+
+                            terraform show -json tfplan |
+                                jq -e -f ../../policies/dev-plan-safety.jq > /dev/null
+
+                            echo "LAB10: DEV Plan Safety Check passed."
+                        '''
+
+                        env.LAB10_DEV_HAS_CHANGES = sh(
+                            script: '''#!/bin/bash
+                                set +x
+                                set -euo pipefail
+
+                                terraform show -json tfplan |
+                                    jq -r 'any(.resource_changes[];
+                                        .mode == "managed"
+                                        and .change.actions == ["update"]
+                                    )'
+                            ''',
+                            returnStdout: true
+                        ).trim()
+
+                        if (!(env.LAB10_DEV_HAS_CHANGES in ['true', 'false'])) {
+                            error('LAB10: Invalid DEV change detection result.')
+                        }
+
+                        echo "LAB10: DEV has changes = ${env.LAB10_DEV_HAS_CHANGES}"
+                    }
                 }
             }
         }
@@ -228,8 +272,167 @@ pipeline {
                 }
             }
         }
+        stage('Terraform Apply - DEV Only') {
+            when {
+                allOf {
+                    environment name: 'LAB10_APPLY_ENV', value: 'dev'
+
+                    environment name: 'LAB10_DEV_HAS_CHANGES', value: 'true'
+
+                    expression {
+                        // Temporary activation lock
+                        return false
+                    }
+                }
+            }
+            steps {
+                dir('LAB10-VSPHERE/environments/dev') {
+                    withCredentials([
+                        string(
+                            credentialsId: 'minio-terraform-access-key',
+                            variable: 'AWS_ACCESS_KEY_ID'
+                        ),
+                        string(
+                            credentialsId: 'minio-terraform-secret-key',
+                            variable: 'AWS_SECRET_ACCESS_KEY'
+                        ),
+                        usernamePassword(
+                            credentialsId: 'vsphere-terraform-credentials',
+                            usernameVariable: 'TF_VAR_vsphere_user',
+                            passwordVariable: 'TF_VAR_vsphere_password'
+                        )
+                    ]) {
+                        withEnv([
+                            'AWS_CA_BUNDLE=/etc/jenkins/certs/minio-public.crt',
+                            'AWS_EC2_METADATA_DISABLED=true',
+                            'TF_IN_AUTOMATION=true'
+                        ]) {
+                            sh '''#!/bin/bash
+                                set +x
+                                set -euo pipefail
+
+                                # 1. Environment verification
+
+                                test "$LAB10_APPLY_ENV" = "dev"
+                                test "$LAB10_DEV_HAS_CHANGES" = "true"
+
+                                # 2. Required file verification
+
+                                test -f tfplan
+                                test -f tfplan.sha256
+                                test -f ../../policies/dev-plan-safety.jq
+
+                                test ! -L tfplan
+                                test ! -L tfplan.sha256
+                                test ! -L ../../policies/dev-plan-safety.jq
+
+                                # 3. File permission verification
+
+                                test "$(stat -c '%a' tfplan)" = "600"
+                                test "$(stat -c '%a' tfplan.sha256)" = "600"
+
+                                sha256sum -c tfplan.sha256 > /dev/null
+
+                                # 4. Original SHA256 verification
+
+                                test -n "$LAB10_DEV_PLAN_SHA256"
+                                test -n "$LAB10_DEV_POLICY_SHA256"
+
+                                CURRENT_PLAN_SHA256=$(sha256sum tfplan | cut -d ' ' -f1)
+
+                                CURRENT_POLICY_SHA256=$(sha256sum ../../policies/dev-plan-safety.jq | cut -d ' ' -f1)
+
+                                if [ "$CURRENT_PLAN_SHA256" != "$LAB10_DEV_PLAN_SHA256" ]; then
+                                    echo "LAB10: DEV Saved Plan integrity verification failed."
+                                    exit 1
+                                fi
+
+                                if [ "$CURRENT_POLICY_SHA256" != "$LAB10_DEV_POLICY_SHA256" ]; then
+                                    echo "LAB10: DEV Safety Policy integrity verification failed."
+                                    exit 1
+                                fi
+
+                                echo "LAB10: Post-Approval Plan Integrity passed."
+                                echo "LAB10: Post-Approval Policy Integrity passed."
+
+                                # 5. External Safety Policy revalidation
+
+                                terraform show -json tfplan |
+                                    jq -e -f ../../policies/dev-plan-safety.jq > /dev/null
+
+                                echo "LAB10: Post-Approval Safety Policy passed."
+
+                                # 6. Enforce exact DEV update
+
+                                terraform show -json tfplan |
+                                    jq -e '
+                                        (.applyable == true)
+                                        and (.complete == true)
+                                        and (.errored == false)
+                                        and (
+                                            [.resource_changes[] | .address] as $addresses
+                                            |
+                                            ($addresses | length)
+                                            ==
+                                            ($addresses | unique | length)
+                                        )
+                                        and all(.resource_changes[];
+                                            (has("deposed") | not)
+                                        )
+                                        and (
+                                            [
+                                                .resource_changes[]
+                                                | select(.change.actions != ["no-op"])
+                                            ] as $changes
+                                            |
+                                            ($changes | length == 1)
+                                            and all($changes[];
+                                                .mode == "managed"
+                                                and .type == "vsphere_virtual_machine"
+                                                and .name == "dev"
+                                                and .provider_name == "registry.terraform.io/vmware/vsphere"
+                                                and .address == "vsphere_virtual_machine.dev"
+                                                and .change.actions == ["update"]
+                                                and .change.before.name == "ubuntu-dev"
+                                                and .change.after.name == "ubuntu-dev"
+                                                and .change.before.id == "420c4cc8-44ae-6f44-9bad-92b82085802b"
+                                                and .change.after.id == "420c4cc8-44ae-6f44-9bad-92b82085802b"
+                                                and .change.before.memory == 1024
+                                                and .change.after.memory == 2048
+                                            )
+                                        )
+                                    ' > /dev/null
+
+                                echo "LAB10: Exact DEV Update verification passed."
+
+                                # 7. Final integrity verification
+
+                                test "$(sha256sum tfplan | cut -d ' ' -f1)" = "$LAB10_DEV_PLAN_SHA256"
+
+                                test "$(sha256sum ../../policies/dev-plan-safety.jq | cut -d ' ' -f1)" = "$LAB10_DEV_POLICY_SHA256"
+
+                                echo "LAB10: All Pre-Apply Security Checks passed."
+
+                                # 8. Execute approved DEV Saved Plan
+
+                                echo "LAB10: Starting controlled DEV Apply."
+
+                                terraform apply \
+                                    -input=false \
+                                    -no-color \
+                                    -lock-timeout=60s \
+                                    tfplan
+
+                                echo "LAB10: DEV Apply completed."
+                            '''
+                        }
+                    }
+                }
+            }
+        }
     }
-    post {
+
+            post {
         success {
             echo 'LAB10: All CI checks passed.'
         }
