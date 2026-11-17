@@ -1,0 +1,2 @@
+*.jq text eol=lf
+Jenkinsfile text eol=lf
