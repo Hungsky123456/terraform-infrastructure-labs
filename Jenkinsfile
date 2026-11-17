@@ -2,6 +2,10 @@
 pipeline {
     agent any
 
+    environment {
+        LAB10_APPLY_ENV = 'dev'
+    }
+
     options {
         timestamps()
         disableConcurrentBuilds()
@@ -141,7 +145,72 @@ pipeline {
                 }
             }
         }
+        stage('Plan Integrity Check') {
+            steps {
+                script {
+                    for (envName in ['dev', 'test', 'prod']) {
+                        dir("LAB10-VSPHERE/environments/${envName}") {
+                            echo "Checking Plan Integrity: ${envName.toUpperCase()}"
 
+                            sh '''
+                                set -eu
+
+                                test -f tfplan
+                                test -f tfplan.sha256
+
+                                test "$(stat -c '%a' tfplan)" = "600"
+                                test "$(stat -c '%a' tfplan.sha256)" = "600"
+
+                                sha256sum -c tfplan.sha256
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+        stage('Plan Safety Check') {
+            steps {
+                dir('LAB10-VSPHERE/environments/dev') {
+                    sh '''#!/bin/bash
+                        set +x
+                        set -euo pipefail
+
+                        terraform show -json tfplan | jq -e '
+                            (.format_version | type == "string")
+                            and (.resource_changes | type == "array")
+                            and (.errored == false)
+                            and (.complete == true)
+                            and (
+                                [
+                                    .resource_changes[]
+                                    | select(.mode == "managed")
+                                    | select(.change.actions != ["no-op"])
+                                ] as $changes
+                                |
+                                ($changes | length <= 1)
+                                and all($changes[];
+                                    .address == "vsphere_virtual_machine.dev"
+                                    and .change.actions == ["update"]
+                                    and .change.before.memory == 1024
+                                    and .change.after.memory == 2048
+                                    and (
+                                        (.change.before | del(.memory))
+                                        ==
+                                        (.change.after | del(.memory))
+                                    )
+                                    and (
+                                        [.change.after_unknown | .. | booleans]
+                                        | all(. == false)
+                                    )
+                                )
+                            )
+                        ' > /dev/null
+
+                        echo "LAB10: DEV Plan Safety Check passed."
+                    '''
+                }
+            }
+        }
         stage('Manual Approval') {
             steps {
                 script {
