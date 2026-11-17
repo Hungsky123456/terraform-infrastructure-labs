@@ -124,7 +124,15 @@ pipeline {
 
                                         terraform init -reconfigure -input=false
 
-                                        terraform plan -input=false -no-color -lock-timeout=60s
+                                        umask 077
+
+					rm -f tfplan tfplan.sha256
+
+					terraform plan -input=false -no-color -lock-timeout=60s -out=tfplan
+
+					terraform show -no-color tfplan
+
+					sha256sum tfplan > tfplan.sha256
                                     '''
                                 }
                             }
@@ -158,6 +166,21 @@ pipeline {
         }
         failure {
             echo 'LAB10: CI checks failed.'
+        }
+        aborted {
+            echo 'LAB10: Pipeline aborted.'
+        }
+        cleanup {
+            sh '''
+                set -eu
+
+                for env in dev test prod; do
+                    rm -f "LAB10-VSPHERE/environments/$env/tfplan"
+                    rm -f "LAB10-VSPHERE/environments/$env/tfplan.sha256"
+                done
+            '''
+
+            echo 'LAB10: Saved Plan files cleaned up.'
         }
     }
 }
