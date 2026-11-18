@@ -521,7 +521,7 @@ pipeline {
         }
     }
 }
-    }        
+    }
     post {
         success {
             echo 'LAB10: All CI checks passed.'
