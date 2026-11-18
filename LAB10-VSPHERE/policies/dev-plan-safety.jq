@@ -110,6 +110,58 @@ def allowed_dev_update:
     and (.change.after_unknown | type == "object")
     and (.change.after_unknown | no_unknown);
 
+def expected_ansible_inventory:
+    {
+        environment: "dev",
+        hostname: "ubuntu-dev",
+        ip_address: "192.168.174.154",
+        vm_uuid: "420c4cc8-44ae-6f44-9bad-92b82085802b"
+    };
+
+def changed_resources:
+    [
+        .resource_changes[]
+        | select(.change.actions != ["no-op"])
+    ];
+
+def changed_outputs:
+    [
+        (.output_changes // {})
+        | to_entries[]
+        | select(.value.actions != ["no-op"])
+    ];
+
+def allowed_inventory_output:
+    .key == "ansible_inventory"
+    and (.value | type == "object")
+    and .value.actions == ["create"]
+    and (.value | has("before"))
+    and .value.before == null
+    and .value.after == expected_ansible_inventory
+    and (.value | has("after_unknown"))
+    and (.value.after_unknown | no_unknown)
+    and (.value | has("after_sensitive"))
+    and (.value.after_sensitive | no_unknown);
+
+def valid_output_changes:
+    (.output_changes // {}) as $outputs
+    | ($outputs | type == "object")
+    and all($outputs[];
+        type == "object"
+        and (.actions | type == "array")
+    )
+    and (
+        changed_outputs as $changes
+        | if ($changes | length) == 0 then
+            true
+          else
+            ($changes | length) == 1
+            and all($changes[]; allowed_inventory_output)
+            and (changed_resources | length) == 0
+            and (.applyable == true)
+          end
+    );
+
 type == "object"
 
 and (
@@ -132,9 +184,8 @@ and empty_array_field("action_invocations")
 
 and (
     if has("output_changes") then
-        .output_changes
-        | type == "object"
-        and all(.[]; .actions == ["no-op"])
+        (.output_changes | type == "object")
+        and valid_output_changes
     else
         true
     end
