@@ -278,11 +278,6 @@ pipeline {
                     environment name: 'LAB10_APPLY_ENV', value: 'dev'
 
                     environment name: 'LAB10_DEV_HAS_CHANGES', value: 'true'
-
-                    expression {
-                        // Temporary activation lock
-                        return false
-                    }
                 }
             }
             steps {
