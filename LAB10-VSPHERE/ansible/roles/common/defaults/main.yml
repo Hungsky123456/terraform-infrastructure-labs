@@ -1,0 +1,7 @@
+---
+common_packages:
+  - curl
+  - vim
+  - ca-certificates
+
+common_timezone: Asia/Ho_Chi_Minh
