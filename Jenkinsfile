@@ -295,6 +295,12 @@ pipeline {
                         DEV Has Changes: ${env.LAB10_DEV_HAS_CHANGES}
 
                         Only authorized DEV changes may be applied.
+
+                        Approval also authorizes Ansible configuration
+                        deployment and application health checks on DEV.
+
+                        Ansible will run even when Terraform Plan Mode
+                        is NO_OP.
                     """.stripIndent().trim(),
                     ok: 'Approve',
                     submitter: 'admin',
@@ -521,17 +527,168 @@ pipeline {
         }
     }
 }
+
+        stage('Generate Ansible Inventory') {
+            steps {
+                dir('LAB10-VSPHERE/ansible') {
+                    sh '''#!/bin/bash
+                        set -euo pipefail
+                        umask 077
+
+                        test "$LAB10_APPLY_ENV" = "dev"
+
+                        mkdir -p inventories/dev
+                        chmod 700 inventories/dev
+
+                        rm -f inventories/dev/inventory.generated.json
+                        rm -f inventories/dev/inventory.generated.json.tmp
+
+                        test -x scripts/generate-inventory.sh
+
+                        echo "LAB10: Inventory generation prerequisites passed."
+                    '''
+
+                    withCredentials([
+                        string(
+                            credentialsId: 'minio-terraform-access-key',
+                            variable: 'AWS_ACCESS_KEY_ID'
+                        ),
+                        string(
+                            credentialsId: 'minio-terraform-secret-key',
+                            variable: 'AWS_SECRET_ACCESS_KEY'
+                        )
+                    ]) {
+                        withEnv([
+                            'AWS_CA_BUNDLE=/etc/jenkins/certs/minio-public.crt',
+                            'AWS_EC2_METADATA_DISABLED=true',
+                            'TF_IN_AUTOMATION=true'
+                        ]) {
+                            sh '''#!/bin/bash
+                                set +x
+                                set -euo pipefail
+                                umask 077
+
+                                INVENTORY="inventories/dev/inventory.generated.json"
+                                TEMP_INVENTORY=$(mktemp "${INVENTORY}.XXXXXX")
+
+                                trap 'rm -f "$TEMP_INVENTORY"' EXIT
+
+                                terraform -chdir=../environments/dev output -json ansible_inventory |
+                                    ./scripts/generate-inventory.sh > "$TEMP_INVENTORY"
+
+                                test -s "$TEMP_INVENTORY"
+
+                                mv "$TEMP_INVENTORY" "$INVENTORY"
+
+                                test "$(stat -c '%a' "$INVENTORY")" = "600"
+
+                                echo "LAB10: DEV Remote State Inventory generated."
+                            '''
+                        }
+                    }
+
+                    sh '''#!/bin/bash
+                        set -euo pipefail
+
+                        export ANSIBLE_CONFIG="$PWD/ansible.cfg"
+
+                        INVENTORY="inventories/dev/inventory.generated.json"
+
+                        test -f "$INVENTORY"
+                        test ! -L "$INVENTORY"
+
+                        ansible-inventory -i "$INVENTORY" --list |
+                            jq -e '
+                                (.dev.hosts == ["ubuntu-dev"])
+                                and
+                                ((._meta.hostvars | keys) == ["ubuntu-dev"])
+                                and
+                                (._meta.hostvars["ubuntu-dev"].ansible_host
+                                    == "192.168.174.154")
+                                and
+                                (._meta.hostvars["ubuntu-dev"].ansible_user
+                                    == "ansible-svc")
+                            ' > /dev/null
+
+                        ansible-inventory -i "$INVENTORY" --graph
+
+                        echo "LAB10: Generated Inventory validation passed."
+                    '''
+                }
+            }
+        }
+
+        stage('Ansible Configuration Deployment') {
+            steps {
+                dir('LAB10-VSPHERE/ansible') {
+                    sshagent(credentials: ['ansible-dev-ssh-credentials']) {
+                        sh '''#!/bin/bash
+                            set +x
+                            set -euo pipefail
+
+                            export ANSIBLE_CONFIG="$PWD/ansible.cfg"
+                            export ANSIBLE_HOST_KEY_CHECKING=True
+
+                            INVENTORY="inventories/dev/inventory.generated.json"
+
+                            test "$LAB10_APPLY_ENV" = "dev"
+                            test -f "$INVENTORY"
+                            test ! -L "$INVENTORY"
+                            test "$(stat -c '%a' "$INVENTORY")" = "600"
+
+                            echo "LAB10: Starting DEV Configuration Deployment."
+
+                            ansible-playbook -i "$INVENTORY" playbooks/site.yml --limit dev
+
+                            echo "LAB10: DEV Configuration Deployment completed."
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Application Health Check') {
+            steps {
+                dir('LAB10-VSPHERE/ansible') {
+                    sshagent(credentials: ['ansible-dev-ssh-credentials']) {
+                        sh '''#!/bin/bash
+                            set +x
+                            set -euo pipefail
+
+                            export ANSIBLE_CONFIG="$PWD/ansible.cfg"
+                            export ANSIBLE_HOST_KEY_CHECKING=True
+
+                            INVENTORY="inventories/dev/inventory.generated.json"
+
+                            test "$LAB10_APPLY_ENV" = "dev"
+                            test -f "$INVENTORY"
+                            test ! -L "$INVENTORY"
+                            test "$(stat -c '%a' "$INVENTORY")" = "600"
+
+                            ansible-playbook -i "$INVENTORY" playbooks/health-check.yml --limit dev
+
+                            echo "LAB10: Application Health Check completed."
+                        '''
+                    }
+                }
+            }
+        }
+
     }
+
     post {
         success {
             echo 'LAB10: All CI checks passed.'
         }
+
         failure {
             echo 'LAB10: CI checks failed.'
         }
+
         aborted {
             echo 'LAB10: Pipeline aborted.'
         }
+
         cleanup {
             sh '''
                 set -eu
@@ -540,9 +697,13 @@ pipeline {
                     rm -f "LAB10-VSPHERE/environments/$env/tfplan"
                     rm -f "LAB10-VSPHERE/environments/$env/tfplan.sha256"
                 done
+
+                rm -f LAB10-VSPHERE/ansible/inventories/dev/inventory.generated.json
+                rm -f LAB10-VSPHERE/ansible/inventories/dev/inventory.generated.json.*
             '''
 
             echo 'LAB10: Saved Plan files cleaned up.'
+            echo 'LAB10: Generated Inventory files cleaned up.'
         }
     }
 }

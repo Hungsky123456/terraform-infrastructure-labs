@@ -76,3 +76,20 @@ backup-*/
 # Terraform CLI configuration
 .terraformrc
 terraform.rc
+
+# LAB10 - Ansible generated inventory
+/LAB10-VSPHERE/ansible/inventories/
+
+# Ansible retry files
+*.retry
+
+# Ansible local artifacts
+.ansible/
+ansible.log
+*.vault-pass
+.vault_pass*
+
+# SSH private keys
+id_rsa
+id_ed25519
+lab10-ansible-dev
