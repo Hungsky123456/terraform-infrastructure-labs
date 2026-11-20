@@ -54,3 +54,42 @@ secrets.auto.tfvars
 
 # Keep Terraform dependency lock files
 !.terraform.lock.hcl
+
+# LAB10 - Additional Terraform protection
+
+# Terraform variable files
+*.tfvars
+*.tfvars.json
+
+# Terraform saved plans
+tfplan
+tfplan.*
+*.tfplan
+
+# Local backup directories
+backup-before-*/
+backup-*/
+
+# Local credentials
+*.key
+
+# Terraform CLI configuration
+.terraformrc
+terraform.rc
+
+# LAB10 - Ansible generated inventory
+/LAB10-VSPHERE/ansible/inventories/
+
+# Ansible retry files
+*.retry
+
+# Ansible local artifacts
+.ansible/
+ansible.log
+*.vault-pass
+.vault_pass*
+
+# SSH private keys
+id_rsa
+id_ed25519
+lab10-ansible-dev
