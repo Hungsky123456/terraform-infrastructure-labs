@@ -68,7 +68,7 @@ resource "vsphere_virtual_machine" "dev" {
   firmware = "efi"
 
   num_cpus = 1
-  memory   = 2048
+  memory   = 1024
 
   guest_id  = "ubuntu64Guest"
   scsi_type = "pvscsi"
