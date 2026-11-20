@@ -1,0 +1,19 @@
+---
+- name: Install common system packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Read current system timezone
+  ansible.builtin.command:
+    cmd: timedatectl show --property=Timezone --value
+  register: current_timezone
+  changed_when: false
+  check_mode: false
+
+- name: Configure system timezone
+  ansible.builtin.command:
+    cmd: "timedatectl set-timezone {{ common_timezone }}"
+  when: current_timezone.stdout != common_timezone
