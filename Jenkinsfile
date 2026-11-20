@@ -470,8 +470,8 @@ pipeline {
                                             and .change.after.id ==
                                                 "420c4cc8-44ae-6f44-9bad-92b82085802b"
 
-                                            and .change.before.memory == 1024
-                                            and .change.after.memory == 2048
+                                            and .change.before.memory == 2048
+                                            and .change.after.memory == 2560
                                         )
 
                                     elif $mode == "OUTPUT_ONLY" then
