@@ -1,6 +1,0 @@
----
-nginx_package: nginx
-nginx_service: nginx
-nginx_document_root: /var/www/html
-nginx_site_title: LAB10 - Automated Web Server
-nginx_environment: DEV
